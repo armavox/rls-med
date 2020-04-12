@@ -1,0 +1,29 @@
+metaconf:
+  ngpus: 1
+  experiment_name: "RLS-MED"
+  ws_path: ../ctln-gan-ws/  # Path to workspace where to save lightinig logs and other artifacts
+  random_seed:
+
+hyperparams:
+  batch_size: 8
+  lr: 0.0001
+  b1: 0.5
+  b2: 0.999
+  latent_dim: 100
+  num_gen_feat: 64
+  num_dis_feat: 64
+  max_epochs: 1000
+
+dataloaders:
+  train:
+    tensor_dataset_name: "TensorDataset64"
+    dataset_params:
+      lidc_datapath: "~/data/ctln-gan-ws/LIDC-IDRI-2020/LIDC-IDRI"
+      lidc_cut_denom: 3
+      cube_voxelsize: 64
+      extract_size_mm: 64.0
+      nodule_diameter_interval: [5.0, 30.0]
+      masked: false
+      mask_dilation_iters: 18
+      ct_clip_range: [-1000, 600]
+      mapping_range: [-0.25, 0.75]
