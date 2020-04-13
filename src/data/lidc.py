@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import Dataset
 
 from data.helpers import extract_cube
-from data.transforms import Normalization
+from data.transforms import Normalization, heaviside
 from utils.helpers import config_snapshot
 
 
@@ -111,13 +111,15 @@ class LIDCNodulesDataset(Dataset):
         self.mask_dilation_iters = mask_dilation_iters
         self.cut_denom = cut_denom
 
-        cluster_list = self._prepare_nodules_annotations()
-        self.nodule_list = self._prepare_nodule_list(cluster_list)
+        cluster_list = self.__prepare_nodules_annotations()
+        self.nodule_list = self.__prepare_nodule_list(cluster_list)
 
         self.clip_range = ct_clip_range
         self.norm = Normalization(
-            from_min=self.clip_range[0], from_max=self.clip_range[1],
-            to_min=mapping_range[0], to_max=mapping_range[1]
+            from_min=self.clip_range[0],
+            from_max=self.clip_range[1],
+            to_min=mapping_range[0],
+            to_max=mapping_range[1],
         )
 
     def __len__(self):
@@ -125,37 +127,24 @@ class LIDCNodulesDataset(Dataset):
 
     def __getitem__(self, i):
         nodule = self.nodule_list[i]
-        nodule_vol = self.load_nodule_vol(nodule)
+        nodule_vol, nodule_levelset_vol = self.load_nodule_vol(nodule)
         nodule_vol = self.norm(np.clip(nodule_vol, *self.clip_range))
 
         sample = {
             "nodule": torch.from_numpy(nodule_vol).unsqueeze(0),
-            'contour': None
+            "levelset": torch.from_numpy(nodule_levelset_vol),
         }
         return sample
 
     def load_nodule_vol(self, nodule: LIDCNodule):
         bb = nodule.bbox
-        scan_vol = nodule.pylidc_scan.to_volume(verbose=False)
+        volume = nodule.pylidc_scan.to_volume(verbose=False)
 
-        if self.masked:
-            # Mask the nodule on the scan
-            masked_volume = np.zeros(scan_vol.shape) - 2048
-            masked_volume[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
-                nodule.mask
-            ] = scan_vol[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
-                nodule.mask
-            ]
-            volume = masked_volume
-        else:
-            volume = scan_vol
-        if self.extract_non_nodule:
-            center = nodule.centroid
-            if center[0] - 64 < 0:
-                center[0] += 64
-            else:
-                center[0] -= 64
-            nodule.centroid = center
+        levelset_vol = np.zeros(volume.shape) - 2048  # -2048 just a technical value
+        levelset_vol[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
+            nodule.mask
+        ] = 1
+        levelset_vol = heaviside(levelset_vol)  # now array values are in [0, 1]
 
         nodule_vol = extract_cube(
             series_volume=volume,
@@ -164,9 +153,16 @@ class LIDCNodulesDataset(Dataset):
             cube_voxelsize=self.cube_voxelsize,
             extract_size_mm=self.extract_size_mm,
         )
-        return nodule_vol
+        nodule_levelset_vol = extract_cube(
+            series_volume=levelset_vol,
+            spacing=nodule.pylidc_scan.spacings,
+            nodule_coords=nodule.centroid,
+            cube_voxelsize=self.cube_voxelsize,
+            extract_size_mm=self.extract_size_mm,
+        )
+        return nodule_vol, nodule_levelset_vol
 
-    def _prepare_nodules_annotations(self):
+    def __prepare_nodules_annotations(self):
         """Search through pylidc database for annotations, make clusters
         of anns corresponged to same nodules and forms list of clusters.
         """
@@ -197,7 +193,7 @@ class LIDCNodulesDataset(Dataset):
                 cluster_list = pickle.load(f)
         return cluster_list
 
-    def _prepare_nodule_list(self, cluster_list: List[List[pylidc.Annotation]]):
+    def __prepare_nodule_list(self, cluster_list: List[List[pylidc.Annotation]]):
         lidc_nodule_config = {
             "diam_interval": self.diam_interval,
             "extract_size_mm": self.extract_size_mm,

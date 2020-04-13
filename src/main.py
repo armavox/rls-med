@@ -1,12 +1,32 @@
+import argparse
+import os
 import warnings
 import utils.helpers as H
+
+from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.trainer import Trainer
+
+from lightning_boilerplates.lightning_crls import CRLSModel
 
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-def run(config):
-    pass
+def run(config: argparse.Namespace):
+    tb_logger = TensorBoardLogger(
+        save_dir=os.path.join(config.metaconf["ws_path"], 'tensorboard_logs'),
+        name=config.metaconf["experiment_name"]
+    )
+    trainer = Trainer(
+        gpus=config.metaconf["ngpus"],
+        distributed_backend="dp",
+        max_epochs=config.hyperparams["max_epochs"],
+        logger=tb_logger,
+        truncated_bptt_steps=10
+    )
+
+    model = CRLSModel(config)
+    trainer.fit(model)
 
 
 if __name__ == "__main__":

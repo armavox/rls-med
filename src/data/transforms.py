@@ -4,6 +4,15 @@ import numpy as np
 import torch
 
 
+SOBEL_X = (
+    torch.tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float).unsqueeze(0).unsqueeze(0)
+)
+
+SOBEL_Y = (
+    torch.tensor([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=torch.float).unsqueeze(0).unsqueeze(0)
+)
+
+
 class CustomTransformNumpy(ABC):
     """Abstract method for custom numpy transformations.
     Every subclass should implement `__init__` for
@@ -50,3 +59,15 @@ class Normalization(CustomTransformNumpy):
         """Denormalization with pre-saved stats"""
         scaled = (volume - self.to_min) / self.to_span
         return scaled * self.from_span + self.from_min
+
+
+def heaviside(mask, eps=1e-5):
+    return 1 / 2 * (1 + (2 / np.pi) * (np.arctan(mask / eps)))
+
+
+def img_derivative(input: torch.FloatTensor, sobel_kernel: torch.FloatTensor) -> torch.FloatTensor:
+    assert input.dim() == 4
+    assert sobel_kernel.dim() == 4
+    conv = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
+    conv.weight = torch.nn.Parameter(sobel_kernel, requires_grad=False)
+    return conv(input)  # [N, C, H, W]
