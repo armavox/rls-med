@@ -127,12 +127,12 @@ class LIDCNodulesDataset(Dataset):
 
     def __getitem__(self, i):
         nodule = self.nodule_list[i]
-        nodule_vol, nodule_levelset_vol = self.load_nodule_vol(nodule)
+        nodule_vol, nodule_mask = self.load_nodule_vol(nodule)
         nodule_vol = self.norm(np.clip(nodule_vol, *self.clip_range))
 
         sample = {
-            "nodule": torch.from_numpy(nodule_vol).unsqueeze(0),
-            "mask": torch.from_numpy(nodule_levelset_vol),
+            "nodule": torch.from_numpy(nodule_vol).unsqueeze(0).permute(0, 3, 1, 2),  # [C, D, H, W]
+            "mask": torch.from_numpy(nodule_mask).unsqueeze(0).permute(0, 3, 1, 2)  # [C, D, H, W]
         }
         return sample
 

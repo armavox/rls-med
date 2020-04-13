@@ -58,7 +58,7 @@ class CRLSModel(LightningModule):
                 f_folder_path = os.path.join(tensor_dataset_path, "0")
                 H.makedirs(f_folder_path)
                 f_path = os.path.join(tensor_dataset_path, "0", f"nodule_{i}.pt")
-                save_nodules = {"nodule": sample["nodule"], "levelset": sample["mask"]}
+                save_nodules = {"nodule": sample["nodule"], "mask": sample["mask"]}
                 torch.save(save_nodules, f_path)
 
         self.dataset = DatasetFolder(tensor_dataset_path, torch.load, ("pt"))
@@ -99,8 +99,8 @@ class CRLSModel(LightningModule):
     def training_step(self, batch, batch_idx):
         nodules, masks = batch[0]["nodule"], batch[0]["mask"]
         nodules, masks = (
-            nodules[:, :, :, :, nodules.size(2) // 2],
-            masks[:, :, :, :, masks.size(2) // 2],
+            nodules[:, :, nodules.size(2) // 2, :, :],
+            masks[:, :, masks.size(2) // 2, :, :]
         )
 
         hiddens = init_levelset(nodules.shape[-2:]).repeat(nodules.size(0), 1, 1, 1)
