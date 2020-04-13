@@ -75,7 +75,6 @@ class CRLSModel(LightningModule):
             sampler=self.train_sampler,
             batch_size=self.hparams.batch_size,
             num_workers=4,
-            shuffle=True,
         )
         return dl
 
@@ -97,7 +96,7 @@ class CRLSModel(LightningModule):
         return F.cross_entropy(y_hat, y)
 
     def training_step(self, batch, batch_idx):
-        nodules, masks = batch[0]["nodule"], batch[0]["mask"]
+        nodules, masks = batch[0]["nodule"].float(), batch[0]["mask"].float()
         nodules, masks = (
             nodules[:, :, nodules.size(2) // 2, :, :],
             masks[:, :, masks.size(2) // 2, :, :]

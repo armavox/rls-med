@@ -130,9 +130,9 @@ class LIDCNodulesDataset(Dataset):
         nodule_vol, nodule_mask = self.load_nodule_vol(nodule)
         nodule_vol = self.norm(np.clip(nodule_vol, *self.clip_range))
 
-        sample = {
-            "nodule": torch.from_numpy(nodule_vol).unsqueeze(0).permute(0, 3, 1, 2),  # [C, D, H, W]
-            "mask": torch.from_numpy(nodule_mask).unsqueeze(0).permute(0, 3, 1, 2)  # [C, D, H, W]
+        sample = {  # permuted to [C, D, H, W]
+            "nodule": torch.from_numpy(nodule_vol).type(torch.float).unsqueeze(0).permute(0, 3, 1, 2),
+            "mask": torch.from_numpy(nodule_mask).type(torch.float).unsqueeze(0).permute(0, 3, 1, 2)
         }
         return sample
 
@@ -144,7 +144,6 @@ class LIDCNodulesDataset(Dataset):
         mask_vol[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
             nodule.mask
         ] = 1
-        # mask_vol = heaviside(mask_vol).astype("int")  # now array values are in [0, 1]
 
         nodule_vol = extract_cube(
             series_volume=volume,

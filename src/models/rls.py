@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import grad
 
-from data.transforms import img_derivative, SOBEL_X, SOBEL_Y
+from data.transforms import img_derivative, heaviside, SOBEL_X, SOBEL_Y
 
 
 class RLSModule(nn.Module):
@@ -30,12 +30,11 @@ class RLSModule(nn.Module):
         self.img_size = input_size[-2:]  # [H, W]
         in_feat = np.prod(self.img_size)
 
-        self.U_g = nn.Parameter(torch.zeros(1, 1, in_feat, in_feat).normal_(std=0.01))
-        self.W_g = nn.Parameter(torch.zeros(1, 1, in_feat, in_feat).normal_(std=0.01))
+        self.U_g = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+        self.W_g = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
 
         self.gru = nn.GRUCell(in_feat, in_feat)
         self.dense = nn.Linear(in_feat, in_feat)
-        # self.prev_hidden = init_levelset(input_size)
 
     def forward(self, input, hidden):
         """input: image [B, C, H, W], hidden: level set [B, C, H, W]; C == 1"""
@@ -47,8 +46,8 @@ class RLSModule(nn.Module):
         I_c2 = ((input - c2) ** 2).view(batch_size, -1)
         x = (
             self.curvature(hidden).view(batch_size, -1)
-            - torch.mm(self.U_g, I_c1)
-            + torch.mm(self.W_g, I_c2)
+            - torch.mm(I_c1, self.U_g)
+            + torch.mm(I_c2, self.W_g)
         )
 
         hidden = self.gru(x, hidden.view(batch_size, -1))
@@ -69,15 +68,17 @@ class RLSModule(nn.Module):
         kappa = (phi_dxx * phi_dy ** 2 - 2 * phi_dx * phi_dy * phi_dxy + phi_dyy * phi_dx ** 2) / (
             phi_dx ** 2 + phi_dy ** 2
         ) ** (3 / 2)
-
-        self.prev_hidden = hidden
         return kappa
 
     def avg_inside(self, input, level_set):
-        pass  # TODO
+        mask = heaviside(level_set) > 0.5
+        inside = input * mask
+        return inside.mean()
 
     def avg_outside(self, input, level_set):
-        pass  # TODO
+        mask = heaviside(level_set) > 0.5
+        outside = input * ~mask
+        return outside.mean()
 
 
 def init_levelset(img_size: tuple):
