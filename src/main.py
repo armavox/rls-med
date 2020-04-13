@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def run(config: argparse.Namespace):
-    tb_logger = TensorBoardLogger(
+    logger = TensorBoardLogger(
         save_dir=os.path.join(config.metaconf["ws_path"], 'tensorboard_logs'),
         name=config.metaconf["experiment_name"]
     )
@@ -21,10 +21,11 @@ def run(config: argparse.Namespace):
         gpus=config.metaconf["ngpus"],
         distributed_backend="dp",
         max_epochs=config.hyperparams["max_epochs"],
-        logger=tb_logger,
-        truncated_bptt_steps=10
+        logger=logger,
+        # truncated_bptt_steps=10
     )
 
+    # Start training
     model = CRLSModel(config)
     trainer.fit(model)
 

@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 import utils.helpers as H
 from data.lidc import LIDCNodulesDataset
-from models.rls import RLSModule
+from models.rls import RLSModule, init_levelset
 
 
 log = logging.getLogger("lightning_boilerplates.crls")
@@ -49,9 +49,7 @@ class CRLSModel(LightningModule):
 
         # compare configs, if not same, refresh dataset
         current_config_snapshot_exists = H.config_snapshot(
-            "dataset_params",
-            self.dataset_params.params,
-            "src/data/aux/.dataset_config_snapshot.json",
+            "dataset_params", self.dataset_params.params, "src/data/aux/.dataset_config_snapshot.json",
         )
         if not current_config_snapshot_exists:
             H.makedirs(tensor_dataset_path)
@@ -60,7 +58,7 @@ class CRLSModel(LightningModule):
                 f_folder_path = os.path.join(tensor_dataset_path, "0")
                 H.makedirs(f_folder_path)
                 f_path = os.path.join(tensor_dataset_path, "0", f"nodule_{i}.pt")
-                save_nodules = {"nodule": sample["nodule"]}
+                save_nodules = {"nodule": sample["nodule"], "levelset": sample["mask"]}
                 torch.save(save_nodules, f_path)
 
         self.dataset = DatasetFolder(tensor_dataset_path, torch.load, ("pt"))
@@ -98,34 +96,40 @@ class CRLSModel(LightningModule):
     def loss_f(self, y_hat, y):
         return F.cross_entropy(y_hat, y)
 
-    def training_step(self, batch, batch_idx, hiddens):
-        imgs, masks = batch
+    def training_step(self, batch, batch_idx):
+        nodules, masks = batch[0]["nodule"], batch[0]["mask"]
+        nodules, masks = (
+            nodules[:, :, :, :, nodules.size(2) // 2],
+            masks[:, :, :, :, masks.size(2) // 2],
+        )
+
+        hiddens = init_levelset(nodules.shape[-2:]).repeat(nodules.size(0), 1, 1, 1)
         for t in range(self.hparams.num_T):
-            output, hiddens = self.forward(imgs, hiddens)
+            outputs, hiddens = self.forward(nodules, hiddens)
 
-        # loss
+        loss = self.loss_f(outputs, masks)
 
-        # tqdm_dict = {"loss": loss}
-        # output = {
-        #     "imgs": imgs,
-        #     "loss": loss,
-        #     "progress_bar": tqdm_dict,
-        #     "log": tqdm_dict,
-        #     "hiddens": hiddens.detach(),
-        # }
+        tqdm_dict = {"loss": loss}
+        output = {
+            "imgs": nodules,
+            "loss": loss,
+            "progress_bar": tqdm_dict,
+            "log": tqdm_dict,
+            "hiddens": hiddens.detach(),
+        }
         return output
 
     def training_step_end(self, output):
         if self.global_step % 20 == 0:
             imgs = output["imgs"]
-            imgs_in_hu = self.dataset.norm.denormalize(imgs)
+            imgs_in_hu = self.dataset.norm.denorm(imgs)
             grid = torchvision.utils.make_grid(imgs_in_hu, 4, normalize=True)
             self.logger.experiment.add_image(f"input_images", grid, self.global_step)
         del output["imgs"]
         return output
 
     def on_epoch_end(self):
-        z = self.validation_z.type_as(self.generator.main[0].weight)
-        sample_imgs_in_hu = self.dataset.norm.denormalize(self.forward(z))
-        grid = torchvision.utils.make_grid(sample_imgs_in_hu, 4, normalize=True)
-        self.logger.experiment.add_image(f"generated_images", grid, self.current_epoch)
+        pass
+        # sample_imgs_in_hu = self.dataset.norm.denorm(self.forward(z))
+        # grid = torchvision.utils.make_grid(sample_imgs_in_hu, 4, normalize=True)
+        # self.logger.experiment.add_image(f"generated_images", grid, self.current_epoch)

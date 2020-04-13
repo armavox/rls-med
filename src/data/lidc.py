@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import Dataset
 
 from data.helpers import extract_cube
-from data.transforms import Normalization, heaviside
+from data.transforms import Normalization
 from utils.helpers import config_snapshot
 
 
@@ -132,7 +132,7 @@ class LIDCNodulesDataset(Dataset):
 
         sample = {
             "nodule": torch.from_numpy(nodule_vol).unsqueeze(0),
-            "levelset": torch.from_numpy(nodule_levelset_vol),
+            "mask": torch.from_numpy(nodule_levelset_vol),
         }
         return sample
 
@@ -140,11 +140,11 @@ class LIDCNodulesDataset(Dataset):
         bb = nodule.bbox
         volume = nodule.pylidc_scan.to_volume(verbose=False)
 
-        levelset_vol = np.zeros(volume.shape) - 2048  # -2048 just a technical value
-        levelset_vol[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
+        mask_vol = np.zeros(volume.shape)
+        mask_vol[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
             nodule.mask
         ] = 1
-        levelset_vol = heaviside(levelset_vol)  # now array values are in [0, 1]
+        # mask_vol = heaviside(mask_vol).astype("int")  # now array values are in [0, 1]
 
         nodule_vol = extract_cube(
             series_volume=volume,
@@ -154,7 +154,7 @@ class LIDCNodulesDataset(Dataset):
             extract_size_mm=self.extract_size_mm,
         )
         nodule_levelset_vol = extract_cube(
-            series_volume=levelset_vol,
+            series_volume=mask_vol,
             spacing=nodule.pylidc_scan.spacings,
             nodule_coords=nodule.centroid,
             cube_voxelsize=self.cube_voxelsize,
