@@ -121,7 +121,8 @@ def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath):
     plt.vlines(0, 0, len(ave_grads) + 1, lw=1, color="k")
     plt.yticks(range(1, len(ave_grads) + 1, 1), layers)
     plt.ylim(0, len(ave_grads) + 1)
-    plt.xlim(-0.001, 1.2 * float(torch.max(torch.stack(max_grads))))
+    max_grad = float(torch.max(torch.stack(max_grads)))
+    plt.xlim(0, 1.2 * (max_grad if not np.isnan(max_grad) else 1))
     plt.ylabel("Layers")
 
     plt.title(f"{legend_model_name}. Epoch {legend_epoch}. Gradient flow")

@@ -112,7 +112,7 @@ class CRLSModel(LightningModule):
     #     return dl
 
     def loss_f(self, y_hat, y):
-        return F.nll_loss(F.log_softmax(y_hat, 1), y.squeeze().long())
+        return F.binary_cross_entropy(torch.sigmoid(y_hat), y.float())
 
     def training_step(self, batch, batch_idx):
         nodules, masks = batch[0]["nodule"], batch[0]["mask"]

@@ -36,7 +36,7 @@ class RLSModule(nn.Module):
         self.W_g = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
 
         self.gru = nn.GRUCell(in_feat, in_feat)
-        self.dense = nn.Linear(in_feat, in_feat * 2)
+        self.dense = nn.Linear(in_feat, in_feat)
 
         xavier_uniform_(self.gru.weight_hh)
         xavier_uniform_(self.gru.weight_ih)
@@ -62,7 +62,7 @@ class RLSModule(nn.Module):
 
         hidden = self.gru(x, hidden.view(batch_size, -1))
         output = self.dense(hidden)
-        return output.view(batch_size, 2, *self.img_size), hidden.view(batch_size, 1, *self.img_size)
+        return output.view(batch_size, *self.img_size), hidden.view(batch_size, 1, *self.img_size)
 
     def curvature(self, hidden):
         """hidden.size: [B, C, H, W], C == 1"""
