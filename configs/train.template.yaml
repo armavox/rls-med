@@ -1,7 +1,7 @@
 metaconf:
   ngpus:
   experiment_name: "RLS"
-  ws_path: ../rls-med-ws/  # Path to workspace where to save lightinig logs and other artifacts
+  ws_path: /ssd/rls-med-ws/  # Path to workspace where to save lightinig logs and other artifacts
   random_seed: 42
 
 hyperparams:
@@ -17,7 +17,7 @@ dataloaders:
   train:
     tensor_dataset_name: "TensorDataset64"
     params:
-      datapath: "~/data/ctln-gan-ws/LIDC-IDRI-2020/LIDC-IDRI"
+      datapath: /ssd/ctln-gan-data/LIDC-IDRI
       cut_denom: 3
       cube_voxelsize: 64
       extract_size_mm: 64.0

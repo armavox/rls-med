@@ -69,5 +69,5 @@ def img_derivative(input: torch.FloatTensor, sobel_kernel: torch.FloatTensor) ->
     assert input.dim() == 4
     assert sobel_kernel.dim() == 4
     conv = torch.nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
-    conv.weight = torch.nn.Parameter(sobel_kernel, requires_grad=False)
+    conv.weight = torch.nn.Parameter(sobel_kernel.type_as(input), requires_grad=False)
     return conv(input)  # [N, C, H, W]

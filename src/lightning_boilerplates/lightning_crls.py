@@ -2,13 +2,15 @@ import logging
 import os
 from argparse import Namespace
 
+import numpy as np
+from tqdm import tqdm
+
 import torch
 import torch.nn.functional as F
 import torchvision
 from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
 from torchvision.datasets import DatasetFolder
 from pytorch_lightning.core import LightningModule
-from tqdm import tqdm
 
 import utils.helpers as H
 from data.lidc import LIDCNodulesDataset
@@ -35,6 +37,26 @@ class CRLSModel(LightningModule):
         lr = self.hparams.lr
         alpha = self.hparams.alpha
         return torch.optim.RMSprop(self.rls_model.parameters(), lr=lr, alpha=alpha)
+
+    def optimizer_step(
+        self, current_epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None
+    ):
+        g_norm = H.get_gradient_norm(self.parameters())
+        gradplot_savepath = H.makedirs(
+            os.path.join(self.metaconf["ws_path"], "artifacts", "gradflow_plots")
+        )
+        H.plot_grad_flow(self.named_parameters(), "RLS", 0, gradplot_savepath)
+        if np.isnan(g_norm):
+            log.warning("  gradient norm is NaN -> skip")
+            optimizer.zero_grad()
+            return
+        elif g_norm > self.hparams.optimizer_max_grad_norm:
+            log.warning(f"  gradient norm is too high: {g_norm:.5f} -> clip to OPTIMIZER_MAX_GRAD_NORM")
+            torch.nn.utils.clip_grad_norm_(self.parameters(), self.hparams.optimizer_max_grad_norm)
+        else:
+            log.info(f"  gradient norm: {g_norm:.5f}")
+        optimizer.step()
+        optimizer.zero_grad()
 
     def prepare_data(self):
         """Prepare and save dataset as TensorDataset to improve training speed.
@@ -71,10 +93,7 @@ class CRLSModel(LightningModule):
 
     def train_dataloader(self):
         dl = DataLoader(
-            self.dataset,
-            sampler=self.train_sampler,
-            batch_size=self.hparams.batch_size,
-            num_workers=4,
+            self.dataset, sampler=self.train_sampler, batch_size=self.hparams.batch_size, num_workers=4,
         )
         return dl
 
@@ -97,18 +116,16 @@ class CRLSModel(LightningModule):
 
     def training_step(self, batch, batch_idx):
         nodules, masks = batch[0]["nodule"], batch[0]["mask"]
-        nodules, masks = (
-            nodules[:, :, nodules.size(2) // 2, :, :],
-            masks[:, :, masks.size(2) // 2, :, :]
-        )
+        nodules, masks = (nodules[:, :, nodules.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :])
 
-        hiddens = init_levelset(nodules.shape[-2:]).repeat(nodules.size(0), 1, 1, 1)
+        hiddens = init_levelset(nodules.shape[-2:]).repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
         for t in range(self.hparams.num_T):
-            outputs, hiddens = self.forward(nodules, hiddens)
+            outputs, hiddens = self.forward(torch.rand_like(nodules), torch.rand_like(hiddens))
+            # self.forward(nodules, hiddens)
 
         loss = self.loss_f(outputs, masks)
 
-        tqdm_dict = {"loss": loss}
+        tqdm_dict = {"train_loss": loss}
         output = {
             "imgs": nodules,
             "loss": loss,

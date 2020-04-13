@@ -1,11 +1,15 @@
 import json
 import logging
 import logging.config
+import math
+import matplotlib.pyplot as plt
 import os
 import re
 import yaml
 from argparse import ArgumentParser, Namespace
 from datetime import datetime
+from matplotlib.lines import Line2D
+from typing import Iterable
 
 import numpy as np
 import torch
@@ -44,6 +48,19 @@ def config_snapshot(name: str, config: dict, old_config_path: str):
     return False
 
 
+def get_gradient_norm(parameters: Iterable[torch.nn.parameter.Parameter], norm_type=2) -> float:
+    if norm_type == math.inf:
+        total_norm = max(p.grad.data.abs().max() for p in parameters)
+    else:
+        total_norm = 0
+        for p in parameters:
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(norm_type)
+                total_norm += param_norm.item() ** norm_type
+        total_norm = total_norm ** (1. / norm_type)
+    return total_norm
+
+
 def load_params_namespace(yaml_path: str) -> Namespace:
     loader = yaml.SafeLoader
     loader.add_implicit_resolver(
@@ -75,6 +92,48 @@ def make_np(x: torch.Tensor) -> np.ndarray:
 def makedirs(path: str):
     if not os.path.exists(path):
         os.makedirs(path)
+    return path
+
+
+def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath):
+    """Plots the gradients flowing through different layers
+    in the net during training. Can be used for checking for
+    possible gradient vanishing / exploding problems.
+
+    Usage: Plug this function in Trainer class after
+    loss.backward() as  "plot_grad_flow(self.model.named_parameters())"
+    to visualize the gradient flow.
+    """
+
+    ave_grads, max_grads, layers = [], [], []
+
+    for n, p in named_parameters:
+        if(p.requires_grad) and ("bias" not in n) and p.grad is not None:
+            layers.append(n)
+            ave_grads.append(p.grad.abs().mean())
+            max_grads.append(p.grad.abs().max())
+
+    plt.figure(figsize=(12, 3))
+    plt.barh(np.arange(1, len(max_grads) + 1), max_grads,
+            alpha=0.1, height=0.5, color="c")
+    plt.barh(np.arange(1, len(max_grads) + 1), ave_grads,
+            alpha=0.1, height=0.5, color="b")
+    plt.vlines(0, 0, len(ave_grads) + 1, lw=2, color="k")
+    plt.yticks(range(1, len(ave_grads) + 1, 1), layers)
+    plt.ylim(0, len(ave_grads) + 1)
+    plt.xlim(-0.001, 1.08)  # zoom in on the lower gradient regions
+    plt.ylabel("Layers")
+    plt.xlabel("Average gradient")
+    plt.title(f"{legend_model_name}. Epoch {legend_epoch}. Gradient flow")
+    plt.grid(alpha=0.4)
+    plt.legend([Line2D([0], [0], color="c", lw=4),
+                Line2D([0], [0], color="b", lw=4),
+                Line2D([0], [0], color="k", lw=4)],
+               ['max-gradient', 'mean-gradient', 'zero-gradient'], loc=1)
+    plt.tight_layout()
+    filename = f"{legend_model_name}_{legend_epoch}"
+    plt.savefig(os.path.join(savepath, filename))
+    plt.close()
 
 
 def random_seed_init(random_seed: bool = None, cuda: bool = False):

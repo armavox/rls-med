@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import grad
+from torch.nn.init import xavier_normal_, xavier_uniform_
 
 from data.transforms import img_derivative, heaviside, SOBEL_X, SOBEL_Y
 
@@ -35,6 +36,14 @@ class RLSModule(nn.Module):
 
         self.gru = nn.GRUCell(in_feat, in_feat)
         self.dense = nn.Linear(in_feat, in_feat * 2)
+
+        xavier_uniform_(self.gru.weight_hh)
+        xavier_uniform_(self.gru.weight_ih)
+        self.gru.bias_ih.data.zero_()
+        self.gru.bias_hh.data.zero_()
+
+        xavier_normal_(self.dense.weight)
+        self.dense.bias.data.zero_()
 
     def forward(self, input, hidden):
         """input: image [B, C, H, W], hidden: level set [B, C, H, W]; C == 1"""
