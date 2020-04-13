@@ -1,4 +1,5 @@
 import numpy as np
+import raster_geometry
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -91,12 +92,19 @@ class RLSModule(nn.Module):
         return outside.mean()
 
 
-def init_levelset(img_size: tuple):
-    """Checkerboard init"""
+def init_levelset(img_size: tuple, shape: str = "checkerboard"):
+    """Levelset init"""
+
     level_set = torch.zeros(img_size)
-    for i in range(img_size[0]):
-        for j in range(img_size[1]):
-            level_set[i, j] = np.sin(i * np.pi / 20) * np.sin(j * np.pi / 20)
+    if shape == "checkerboard":
+        for i in range(img_size[0]):
+            for j in range(img_size[1]):
+                level_set[i, j] = np.sin(i * np.pi / 20) * np.sin(j * np.pi / 20)
+    elif shape == "circle":
+        mask = raster_geometry.circle(img_size, img_size[0] // 2 - 5)
+        level_set[mask] = 1
+    else:
+        raise NotImplementedError
     return level_set
 
 
@@ -123,3 +131,9 @@ def lstm_cell(input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
     hy = outgate * torch.tanh(cy)
 
     return hy, cy
+
+# import matplotlib.pyplot as plt
+# plt.imshow((hidden.cpu().detach().numpy()[0][0]))
+# plt.colorbar()
+# plt.savefig('hidden.png')
+# plt.close()

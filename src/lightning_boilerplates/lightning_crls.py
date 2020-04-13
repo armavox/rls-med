@@ -118,9 +118,10 @@ class CRLSModel(LightningModule):
         nodules, masks = batch[0]["nodule"], batch[0]["mask"]
         nodules, masks = (nodules[:, :, nodules.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :])
 
-        hiddens = init_levelset(nodules.shape[-2:]).repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
+        hiddens = init_levelset(nodules.shape[-2:], shape="circle")
+        hiddens = hiddens.repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
         for t in range(self.hparams.num_T):
-            outputs, hiddens = self.forward(torch.rand_like(nodules), torch.rand_like(hiddens))
+            outputs, hiddens = self.forward(nodules, hiddens)
             # self.forward(nodules, hiddens)
 
         loss = self.loss_f(outputs, masks)

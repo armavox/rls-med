@@ -14,3 +14,4 @@ dependencies:
     - pre-commit==1.22.0
     - pylidc==0.2.1
     - pytorch-lightning==0.7.3
+    - raster-geometry==0.1.4.1

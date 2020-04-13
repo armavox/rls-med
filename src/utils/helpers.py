@@ -57,7 +57,7 @@ def get_gradient_norm(parameters: Iterable[torch.nn.parameter.Parameter], norm_t
             if p.grad is not None:
                 param_norm = p.grad.data.norm(norm_type)
                 total_norm += param_norm.item() ** norm_type
-        total_norm = total_norm ** (1. / norm_type)
+        total_norm = total_norm ** (1.0 / norm_type)
     return total_norm
 
 
@@ -108,28 +108,33 @@ def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath):
     ave_grads, max_grads, layers = [], [], []
 
     for n, p in named_parameters:
-        if(p.requires_grad) and ("bias" not in n) and p.grad is not None:
+        if (p.requires_grad) and ("bias" not in n) and p.grad is not None:
             layers.append(n)
             ave_grads.append(p.grad.abs().mean())
             max_grads.append(p.grad.abs().max())
 
     plt.figure(figsize=(12, 3))
-    plt.barh(np.arange(1, len(max_grads) + 1), max_grads,
-            alpha=0.1, height=0.5, color="c")
-    plt.barh(np.arange(1, len(max_grads) + 1), ave_grads,
-            alpha=0.1, height=0.5, color="b")
-    plt.vlines(0, 0, len(ave_grads) + 1, lw=2, color="k")
+    plt.barh(np.arange(1, len(max_grads) + 1), max_grads, alpha=0.4, height=0.5, color="c")
+    plt.barh(np.arange(1, len(max_grads) + 1), ave_grads, alpha=0.4, height=0.5, color="b")
+    plt.xscale("log")
+
+    plt.vlines(0, 0, len(ave_grads) + 1, lw=1, color="k")
     plt.yticks(range(1, len(ave_grads) + 1, 1), layers)
     plt.ylim(0, len(ave_grads) + 1)
-    plt.xlim(-0.001, 1.08)  # zoom in on the lower gradient regions
+    plt.xlim(-0.001, 1.2 * float(torch.max(torch.stack(max_grads))))
     plt.ylabel("Layers")
-    plt.xlabel("Average gradient")
+
     plt.title(f"{legend_model_name}. Epoch {legend_epoch}. Gradient flow")
     plt.grid(alpha=0.4)
-    plt.legend([Line2D([0], [0], color="c", lw=4),
-                Line2D([0], [0], color="b", lw=4),
-                Line2D([0], [0], color="k", lw=4)],
-               ['max-gradient', 'mean-gradient', 'zero-gradient'], loc=1)
+    plt.legend(
+        [
+            Line2D([0], [0], color="c", lw=4),
+            Line2D([0], [0], color="b", lw=4),
+            Line2D([0], [0], color="k", lw=4),
+        ],
+        ["max-gradient", "mean-gradient", "zero-gradient"],
+        loc=1,
+    )
     plt.tight_layout()
     filename = f"{legend_model_name}_{legend_epoch}"
     plt.savefig(os.path.join(savepath, filename))
