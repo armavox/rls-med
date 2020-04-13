@@ -30,10 +30,8 @@ class RLSModule(nn.Module):
         self.img_size = input_size[-2:]  # [H, W]
         in_feat = np.prod(self.img_size)
 
-        U_g = torch.zeros(in_feat, in_feat).normal_(std=0.01)
-        W_g = torch.zeros(in_feat, in_feat).normal_(std=0.01)
-        self.U_g = nn.Parameter(U_g).unsqueeze(0).unsqueeze(0)
-        self.W_g = nn.Parameter(W_g).unsqueeze(0).unsqueeze(0)
+        self.U_g = nn.Parameter(torch.zeros(1, 1, in_feat, in_feat).normal_(std=0.01))
+        self.W_g = nn.Parameter(torch.zeros(1, 1, in_feat, in_feat).normal_(std=0.01))
 
         self.gru = nn.GRUCell(in_feat, in_feat)
         self.dense = nn.Linear(in_feat, in_feat)

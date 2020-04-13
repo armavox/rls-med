@@ -36,6 +36,6 @@ if __name__ == "__main__":
     H.set_logging_config("./configs/logging_config.yaml", config.metaconf["ws_path"])
 
     use_cuda = (True if config.metaconf["ngpus"] != 0 else False)
-    H.random_seed_init(config.trainer["random_seed"], use_cuda)
+    H.random_seed_init(config.metaconf["random_seed"], use_cuda)
 
     run(config)

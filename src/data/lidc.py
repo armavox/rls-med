@@ -74,7 +74,7 @@ class LIDCNodulesDataset(Dataset):
             Actual size in mm of extracted cube around nodule, by default 48.0
         hist_eq_norm_json_filepath : str, optional
             Path to file to save/load normalization characteristics,
-            by default "./app/datasets/aux/lidc_histeq_norm_stats.json"
+            by default "./src/data/aux/lidc_histeq_norm_stats.json"
         nodule_diameter_interval : tuple, optional
             All extracted nodules will have diameters in the provided interval,
             by default [10, 30)
@@ -90,10 +90,10 @@ class LIDCNodulesDataset(Dataset):
             by default 3
         cluster_list_pickle_path : str, optional
             Auxiliary file for faster dataset loading in second and subsequent runs,
-            by default "./app/datasets/aux/lidc_cluster_list.pickle"
+            by default "./src/data/aux/lidc_cluster_list.pickle"
         nodule_list_pickle_path : str, optional
             Auxiliary file for faster dataset loading in second and subsequent runs,
-            by default "./app/datasets/aux/lidc_nodule_list.pickle"
+            by default "./src/data/aux/lidc_nodule_list.pickle"
         composed: bool, optional
             If Dataset used as part of composed dataset (see ctln_dataset.LIDC_LNDb_Dataset),
             by default False
@@ -170,7 +170,7 @@ class LIDCNodulesDataset(Dataset):
         # Prepare or load annotations clustered for each nodule
         lidc_ann_config = {"annotations_number_required": self.annotations_number_required}
         ann_snapshot_exists = config_snapshot(
-            "lidc_ann", lidc_ann_config, "./app/datasets/aux/.lidcann_config_snapshot.json"
+            "lidc_ann", lidc_ann_config, "./src/data/aux/.lidcann_config_snapshot.json"
         )
         ann_pickle_exists = os.path.exists(self.cluster_list_pickle_path)
         if not ann_pickle_exists or not ann_snapshot_exists:
@@ -201,7 +201,7 @@ class LIDCNodulesDataset(Dataset):
         }
         nodule_pickle_exists = os.path.exists(self.nodule_list_pickle_path)
         snapshot_exists = config_snapshot(
-            "lidc_nodule", lidc_nodule_config, "./app/datasets/aux/.lidcnod_config_snapshot.json"
+            "lidc_nodule", lidc_nodule_config, "./src/data/aux/.lidcnod_config_snapshot.json"
         )
         if not nodule_pickle_exists or not snapshot_exists:
             nodule_list = []

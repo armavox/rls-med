@@ -79,19 +79,19 @@ class CRLSModel(LightningModule):
         )
         return dl
 
-    def val_dataloader(self):
-        dl = DataLoader(
-            self.dataset,
-            self.val_sampler,
-            batch_size=self.hparams.batch_size,
-            num_workers=4,
-            shuffle=True,
-        )
-        return dl
+    # def val_dataloader(self):
+    #     dl = DataLoader(
+    #         self.dataset,
+    #         self.val_sampler,
+    #         batch_size=self.hparams.batch_size,
+    #         num_workers=4,
+    #         shuffle=True,
+    #     )
+    #     return dl
 
-    def test_dataloader(self):
-        dl = DataLoader(self.test_subset)
-        return dl
+    # def test_dataloader(self):
+    #     dl = DataLoader(self.test_subset)
+    #     return dl
 
     def loss_f(self, y_hat, y):
         return F.cross_entropy(y_hat, y)
