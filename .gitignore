@@ -4,10 +4,12 @@ __pycache__
 .ipynb_checkpoints
 .DS_Store
 *.pyc
-.*
-!.pre-commit-config.yaml
-!.gitignore
 mlruns
 lightning_logs
 Untitled.ipynb
 notebooks
+
+.*
+!.pre-commit-config.yaml
+!.gitignore
+!.flake8
