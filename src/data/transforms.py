@@ -62,7 +62,7 @@ class Normalization(CustomTransformNumpy):
 
 
 def heaviside(mask, eps=1e-5):
-    return 1 / 2 * (1 + (2 / np.pi) * (np.arctan(mask / eps)))
+    return 1 / 2 * (1 + (2 / np.pi) * (torch.atan(mask / eps)))
 
 
 def img_derivative(input: torch.FloatTensor, sobel_kernel: torch.FloatTensor) -> torch.FloatTensor:

@@ -34,14 +34,14 @@ class RLSModule(nn.Module):
         self.W_g = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
 
         self.gru = nn.GRUCell(in_feat, in_feat)
-        self.dense = nn.Linear(in_feat, in_feat)
+        self.dense = nn.Linear(in_feat, in_feat * 2)
 
     def forward(self, input, hidden):
         """input: image [B, C, H, W], hidden: level set [B, C, H, W]; C == 1"""
 
         batch_size = input.size(0)
 
-        c1, c2 = self.avg_inside(input, hidden), self.avg_outside(input, hidden)
+        c1, c2 = self.avg_inside(input, hidden.detach()), self.avg_outside(input, hidden.detach())
         I_c1 = ((input - c1) ** 2).view(batch_size, -1)
         I_c2 = ((input - c2) ** 2).view(batch_size, -1)
         x = (
@@ -52,7 +52,7 @@ class RLSModule(nn.Module):
 
         hidden = self.gru(x, hidden.view(batch_size, -1))
         output = self.dense(hidden)
-        return output.view(batch_size, 1, *self.img_size), hidden.view(batch_size, 1, *self.img_size)
+        return output.view(batch_size, 2, *self.img_size), hidden.view(batch_size, 1, *self.img_size)
 
     def curvature(self, hidden):
         """hidden.size: [B, C, H, W], C == 1"""
@@ -68,6 +68,7 @@ class RLSModule(nn.Module):
         kappa = (phi_dxx * phi_dy ** 2 - 2 * phi_dx * phi_dy * phi_dxy + phi_dyy * phi_dx ** 2) / (
             phi_dx ** 2 + phi_dy ** 2
         ) ** (3 / 2)
+        kappa[torch.isnan(kappa)] = 0
         return kappa
 
     def avg_inside(self, input, level_set):

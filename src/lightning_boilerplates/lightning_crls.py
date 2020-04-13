@@ -93,10 +93,10 @@ class CRLSModel(LightningModule):
     #     return dl
 
     def loss_f(self, y_hat, y):
-        return F.cross_entropy(y_hat, y)
+        return F.nll_loss(F.log_softmax(y_hat, 1), y.squeeze().long())
 
     def training_step(self, batch, batch_idx):
-        nodules, masks = batch[0]["nodule"].float(), batch[0]["mask"].float()
+        nodules, masks = batch[0]["nodule"], batch[0]["mask"]
         nodules, masks = (
             nodules[:, :, nodules.size(2) // 2, :, :],
             masks[:, :, masks.size(2) // 2, :, :]
@@ -114,7 +114,6 @@ class CRLSModel(LightningModule):
             "loss": loss,
             "progress_bar": tqdm_dict,
             "log": tqdm_dict,
-            "hiddens": hiddens.detach(),
         }
         return output
 

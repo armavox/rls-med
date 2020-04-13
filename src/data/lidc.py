@@ -132,7 +132,7 @@ class LIDCNodulesDataset(Dataset):
 
         sample = {  # permuted to [C, D, H, W]
             "nodule": torch.from_numpy(nodule_vol).type(torch.float).unsqueeze(0).permute(0, 3, 1, 2),
-            "mask": torch.from_numpy(nodule_mask).type(torch.float).unsqueeze(0).permute(0, 3, 1, 2)
+            "mask": torch.from_numpy(nodule_mask).type(torch.long).permute(2, 0, 1)
         }
         return sample
 
