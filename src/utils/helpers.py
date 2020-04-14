@@ -13,6 +13,7 @@ from typing import Iterable
 
 import numpy as np
 import torch
+from torch.autograd import grad
 
 
 log = logging.getLogger("utils.helpers")
@@ -61,6 +62,13 @@ def get_gradient_norm(parameters: Iterable[torch.nn.parameter.Parameter], norm_t
     return total_norm
 
 
+def nth_derivative(f, wrt, n):
+    for i in range(n):
+        grads = grad(f, wrt, create_graph=True)[0]
+        f = grads.sum()
+    return grads
+
+
 def load_params_namespace(yaml_path: str) -> Namespace:
     loader = yaml.SafeLoader
     loader.add_implicit_resolver(
@@ -95,7 +103,7 @@ def makedirs(path: str):
     return path
 
 
-def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath):
+def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath, return_fig=True):
     """Plots the gradients flowing through different layers
     in the net during training. Can be used for checking for
     possible gradient vanishing / exploding problems.
@@ -113,7 +121,7 @@ def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath):
             ave_grads.append(p.grad.abs().mean())
             max_grads.append(p.grad.abs().max())
 
-    plt.figure(figsize=(12, 3))
+    fig = plt.figure(figsize=(12, 3), dpi=90)
     plt.barh(np.arange(1, len(max_grads) + 1), max_grads, alpha=0.4, height=0.5, color="c")
     plt.barh(np.arange(1, len(max_grads) + 1), ave_grads, alpha=0.4, height=0.5, color="b")
     plt.xscale("log")
@@ -139,7 +147,10 @@ def plot_grad_flow(named_parameters, legend_model_name, legend_epoch, savepath):
     plt.tight_layout()
     filename = f"{legend_model_name}_{legend_epoch}"
     plt.savefig(os.path.join(savepath, filename))
-    plt.close()
+    if return_fig:
+        return fig
+    else:
+        plt.close()
 
 
 def random_seed_init(random_seed: bool = None, cuda: bool = False):

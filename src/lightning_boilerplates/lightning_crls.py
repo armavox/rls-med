@@ -31,7 +31,7 @@ class CRLSModel(LightningModule):
         self.rls_model = RLSModule(inp_image_size)
 
     def forward(self, input, hidden):
-        return self.rls_model(input, hidden)
+        return self.rls_model(input, hidden, self.logger.experiment)
 
     def configure_optimizers(self):
         lr = self.hparams.lr
@@ -45,7 +45,8 @@ class CRLSModel(LightningModule):
         gradplot_savepath = H.makedirs(
             os.path.join(self.metaconf["ws_path"], "artifacts", "gradflow_plots")
         )
-        H.plot_grad_flow(self.named_parameters(), "RLS", 0, gradplot_savepath)
+        fig = H.plot_grad_flow(self.named_parameters(), "RLS", 0, gradplot_savepath)
+        self.logger.experiment.add_figure('sdf', fig, self.global_step)
         if np.isnan(g_norm):
             log.warning("  gradient norm is NaN -> skip")
             optimizer.zero_grad()

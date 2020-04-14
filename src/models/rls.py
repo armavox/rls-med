@@ -3,8 +3,9 @@ import raster_geometry
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import grad
 from torch.nn.init import xavier_normal_, xavier_uniform_
+from torch.utils.tensorboard.writer import SummaryWriter
+from torchvision.utils import make_grid
 
 from data.transforms import img_derivative, heaviside, SOBEL_X, SOBEL_Y
 
@@ -32,8 +33,15 @@ class RLSModule(nn.Module):
         self.img_size = input_size[-2:]  # [H, W]
         in_feat = np.prod(self.img_size)
 
-        self.U_g = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
-        self.W_g = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+        self.ug = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+        self.wg = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+
+        # self.uzr = nn.Parameter(torch.zeros(2 * in_feat, in_feat).normal_(std=0.01))
+        # self.wzr = nn.Parameter(torch.zeros(2 * in_feat, in_feat).normal_(std=0.01))
+        # self.bz = nn.Parameter(torch.zeros(2 * in_feat))
+        # self.uo = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+        # self.wo = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+        # self.bo = nn.Parameter(torch.zeros(in_feat))
 
         self.gru = nn.GRUCell(in_feat, in_feat)
         self.dense = nn.Linear(in_feat, in_feat)
@@ -46,23 +54,34 @@ class RLSModule(nn.Module):
         xavier_normal_(self.dense.weight)
         self.dense.bias.data.zero_()
 
-    def forward(self, input, hidden):
+        self.writer = None
+
+    def forward(self, input, hidden, writer: SummaryWriter = None):
         """input: image [B, C, H, W], hidden: level set [B, C, H, W]; C == 1"""
 
-        batch_size = input.size(0)
+        if self.writer is None and writer is not None:
+            self.writer = writer
+
+        self.batch_size = input.size(0)
 
         c1, c2 = self.avg_inside(input, hidden.detach()), self.avg_outside(input, hidden.detach())
-        I_c1 = ((input - c1) ** 2).view(batch_size, -1)
-        I_c2 = ((input - c2) ** 2).view(batch_size, -1)
+        I_c1 = ((input - c1) ** 2).view(self.batch_size, -1)
+        I_c2 = ((input - c2) ** 2).view(self.batch_size, -1)
         x = (
-            self.curvature(hidden).view(batch_size, -1)
-            - torch.mm(I_c1, self.U_g)
-            + torch.mm(I_c2, self.W_g)
+            self.curvature(hidden).view(self.batch_size, -1)
+            - torch.mm(I_c1, self.ug)
+            + torch.mm(I_c2, self.wg)
         )
-
-        hidden = self.gru(x, hidden.view(batch_size, -1))
+        # hidden = gru_rls_cell(
+        #   x, hidden.view(self.batch_size, -1), self.uzr, self.wzr, self.bz, self.uo, self.wo, self.bo
+        # )
+        hidden = self.gru(x, hidden.view(self.batch_size, -1))
+        hidden = F.relu(hidden)
         output = self.dense(hidden)
-        return output.view(batch_size, *self.img_size), hidden.view(batch_size, 1, *self.img_size)
+        return (
+            output.view(self.batch_size, *self.img_size),
+            hidden.view(self.batch_size, 1, *self.img_size),
+        )
 
     def curvature(self, hidden):
         """hidden.size: [B, C, H, W], C == 1"""
@@ -79,6 +98,7 @@ class RLSModule(nn.Module):
             phi_dx ** 2 + phi_dy ** 2
         ) ** (3 / 2)
         kappa[torch.isnan(kappa)] = 0
+        self.writer.add_image(f"kappa", make_grid(kappa.view(8, 1, 64, 64), 4), 0)
         return kappa
 
     def avg_inside(self, input, level_set):
@@ -107,30 +127,6 @@ def init_levelset(img_size: tuple, shape: str = "checkerboard"):
         raise NotImplementedError
     return level_set
 
-
-def nth_derivative(f, wrt, n):
-    for i in range(n):
-        grads = grad(f, wrt, create_graph=True)[0]
-        f = grads.sum()
-    return grads
-
-
-def lstm_cell(input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
-
-    hx, cx = hidden  # w_ih: (256, 4), b_ih: (256); w_hh: (256, 64), b_hh: (256)
-    gates = F.linear(input, w_ih, b_ih) + F.linear(hx, w_hh, b_hh)
-
-    ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
-
-    ingate = torch.sigmoid(ingate)
-    forgetgate = torch.sigmoid(forgetgate)
-    cellgate = torch.tanh(cellgate)
-    outgate = torch.sigmoid(outgate)
-
-    cy = (forgetgate * cx) + (ingate * cellgate)
-    hy = outgate * torch.tanh(cy)
-
-    return hy, cy
 
 # import matplotlib.pyplot as plt
 # plt.imshow((hidden.cpu().detach().numpy()[0][0]))
