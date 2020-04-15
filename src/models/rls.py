@@ -1,3 +1,5 @@
+from functools import partial
+
 import numpy as np
 import raster_geometry
 import torch
@@ -57,32 +59,32 @@ class RLSModule(nn.Module):
 
         self.writer = None
 
-    def forward(self, input, hidden, writer: SummaryWriter = None):
+    def forward(self, input, hidden, writer: SummaryWriter = None, step: int = None):
         """input: image [B, C, H, W], hidden: level set [B, C, H, W]; C == 1"""
 
-        if self.writer is None and writer is not None:
-            self.writer = writer
-
-        self.batch_size = input.size(0)
+        batch_size = input.size(0)
 
         c1, c2 = self.avg_inside(input, hidden.detach()), self.avg_outside(input, hidden.detach())
-        I_c1 = ((input - c1) ** 2).view(self.batch_size, -1)
-        I_c2 = ((input - c2) ** 2).view(self.batch_size, -1)
-        x = (
-            self.curvature(hidden).view(self.batch_size, -1)
-            - torch.mm(I_c1, self.ug)
-            + torch.mm(I_c2, self.wg)
-        )
-        # TODO: Here is could be problems with weight initialization. Try *eye* init
+        I_c1 = ((input - c1) ** 2).view(batch_size, -1)
+        I_c2 = ((input - c2) ** 2).view(batch_size, -1)
+        kappa = self.curvature(hidden).view(batch_size, -1)
+        make_grid_p = partial(make_grid, nrow=4, normalize=True)
+        if writer is not None:
+            writer.add_image(f"rls/hidden", make_grid_p(hidden.detach().view(-1, 1, 64, 64)), step)
+            writer.add_image(f"rls/I_c1", make_grid_p(I_c1.detach().view(-1, 1, 64, 64)), step)
+            writer.add_image(f"rls/I_c2", make_grid_p(I_c2.detach().view(-1, 1, 64, 64)), step)
+            writer.add_image(f"rls/kappa", make_grid(kappa.detach().view(-1, 1, 64, 64), 4), step)
+
+        x = kappa - torch.mm(I_c1, self.ug) + torch.mm(I_c2, self.wg)
         # hidden = gru_rls_cell(
-        #   x, hidden.view(self.batch_size, -1), self.uzr, self.wzr, self.bz, self.uo, self.wo, self.bo
+        #   x, hidden.view(batch_size, -1), self.uzr, self.wzr, self.bz, self.uo, self.wo, self.bo
         # )
-        hidden = self.gru(x, hidden.view(self.batch_size, -1))
+        hidden = self.gru(x, hidden.view(batch_size, -1))
         hidden = F.relu(hidden)
         output = self.dense(hidden)
         return (
-            output.view(self.batch_size, *self.img_size),
-            hidden.view(self.batch_size, 1, *self.img_size),
+            output.view(batch_size, *self.img_size),
+            hidden.view(batch_size, 1, *self.img_size),
         )
 
     def curvature(self, hidden):
@@ -90,17 +92,13 @@ class RLSModule(nn.Module):
 
         phi_dx = img_derivative(hidden, SOBEL_X)
         phi_dxx = img_derivative(phi_dx, SOBEL_X)
-
         phi_dy = img_derivative(hidden, SOBEL_Y)
         phi_dyy = img_derivative(phi_dy, SOBEL_Y)
-
         phi_dxy = img_derivative(phi_dx, SOBEL_Y)
 
-        kappa = (phi_dxx * phi_dy ** 2 - 2 * phi_dx * phi_dy * phi_dxy + phi_dyy * phi_dx ** 2) / (
-            phi_dx ** 2 + phi_dy ** 2
-        ) ** (3 / 2)
-        kappa[torch.isnan(kappa)] = 0
-        self.writer.add_image(f"kappa", make_grid(kappa.view(8, 1, 64, 64), 4), 0)
+        kappa_nom = (phi_dxx * phi_dy ** 2 - 2 * phi_dx * phi_dy * phi_dxy + phi_dyy * phi_dx ** 2)
+        kappa_denom = (phi_dx ** 2 + phi_dy ** 2) ** (3 / 2) + 1e-8
+        kappa = kappa_nom / kappa_denom
         return kappa
 
     def avg_inside(self, input, level_set):

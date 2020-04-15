@@ -30,8 +30,8 @@ class CRLSModel(LightningModule):
         inp_image_size = [self.dataset_params.params["cube_voxelsize"]] * 2
         self.rls_model = RLSModule(inp_image_size)
 
-    def forward(self, input, hidden):
-        return self.rls_model(input, hidden, self.logger.experiment)
+    def forward(self, input, hidden, step: int):
+        return self.rls_model(input, hidden, self.logger.experiment, step)
 
     def configure_optimizers(self):
         lr = self.hparams.lr
@@ -100,13 +100,13 @@ class CRLSModel(LightningModule):
 
     def training_step(self, batch, batch_idx):
         nodules, masks = batch[0]["nodule"], batch[0]["mask"]
-        nodules, masks = (nodules[:, :, nodules.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :])
+        nodules, masks = nodules[:, :, nodules.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :]
 
         hiddens = init_levelset(nodules.shape[-2:], shape="circle")
         hiddens = hiddens.repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
         for t in range(self.hparams.num_T):
-            outputs, hiddens = self.forward(nodules, hiddens)
-            # self.forward(nodules, hiddens)
+            step = self.current_epoch * 1000 + batch_idx * 100 + t
+            outputs, hiddens = self.forward(nodules, hiddens, step=step)
 
         loss = self.loss_f(outputs, masks)
 
