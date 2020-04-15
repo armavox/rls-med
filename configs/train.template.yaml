@@ -1,5 +1,6 @@
 metaconf:
   ngpus: 2
+  dl_workers: 8
   experiment_name: "RLS"
   ws_path: /data/ssd2/rls-med-ws/  # Path to workspace where to save lightinig logs and other artifacts
   random_seed: 42
@@ -7,6 +8,7 @@ metaconf:
 hyperparams:
   batch_size: 16
   lr: 0.0001
+  lr_shed_rate: 0.99
   alpha: 0.9
   b1: 0.5
   b2: 0.999

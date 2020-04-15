@@ -119,7 +119,7 @@ def init_levelset(img_size: tuple, shape: str = "checkerboard"):
     if shape == "checkerboard":
         for i in range(img_size[0]):
             for j in range(img_size[1]):
-                level_set[i, j] = np.sin(i * np.pi / 20) * np.sin(j * np.pi / 20)
+                level_set[i, j] = np.sin(i * np.pi / 10) * np.sin(j * np.pi / 10)
     elif shape == "circle":
         mask = raster_geometry.circle(img_size, img_size[0] // 2 - 5)
         level_set[mask] = 1

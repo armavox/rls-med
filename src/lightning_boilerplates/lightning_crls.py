@@ -37,7 +37,12 @@ class CRLSModel(LightningModule):
     def configure_optimizers(self):
         lr = self.hparams.lr
         alpha = self.hparams.alpha
-        return torch.optim.RMSprop(self.rls_model.parameters(), lr=lr, alpha=alpha)
+        optimizer = torch.optim.RMSprop(self.rls_model.parameters(), lr=lr, alpha=alpha)
+        lr_scheduler = {
+            "scheduler": torch.optim.lr_scheduler.ExponentialLR(optimizer, self.hparams.lr_shed_rate),
+            "interval": "epoch",
+        }
+        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
 
     def optimizer_step(
         self, current_epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None
@@ -78,13 +83,19 @@ class CRLSModel(LightningModule):
 
     def train_dataloader(self):
         dl = DataLoader(
-            self.dataset, sampler=self.train_sampler, batch_size=self.hparams.batch_size, num_workers=4,
+            self.dataset,
+            sampler=self.train_sampler,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.metaconf["dl_workers"],
         )
         return dl
 
     def val_dataloader(self):
         dl = DataLoader(
-            self.dataset, sampler=self.val_sampler, batch_size=self.hparams.batch_size, num_workers=4,
+            self.dataset,
+            sampler=self.val_sampler,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.metaconf["dl_workers"],
         )
         return dl
 
@@ -111,7 +122,6 @@ class CRLSModel(LightningModule):
         output = {
             "batch": batch[0],
             "loss": loss,
-            "progress_bar": tqdm_dict,
             "log": tqdm_dict,
         }
         return output
