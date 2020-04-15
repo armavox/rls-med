@@ -3,7 +3,6 @@ import raster_geometry
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.init import xavier_normal_, xavier_uniform_
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.utils import make_grid
 
@@ -35,6 +34,8 @@ class RLSModule(nn.Module):
 
         self.ug = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
         self.wg = nn.Parameter(torch.zeros(in_feat, in_feat).normal_(std=0.01))
+        nn.init.eye_(self.ug)
+        nn.init.eye_(self.wg)
 
         # self.uzr = nn.Parameter(torch.zeros(2 * in_feat, in_feat).normal_(std=0.01))
         # self.wzr = nn.Parameter(torch.zeros(2 * in_feat, in_feat).normal_(std=0.01))
@@ -46,12 +47,12 @@ class RLSModule(nn.Module):
         self.gru = nn.GRUCell(in_feat, in_feat)
         self.dense = nn.Linear(in_feat, in_feat)
 
-        xavier_uniform_(self.gru.weight_hh)
-        xavier_uniform_(self.gru.weight_ih)
+        nn.init.eye_(self.gru.weight_hh)
+        nn.init.eye_(self.gru.weight_ih)
         self.gru.bias_ih.data.zero_()
         self.gru.bias_hh.data.zero_()
 
-        xavier_normal_(self.dense.weight)
+        nn.init.xavier_normal_(self.dense.weight)
         self.dense.bias.data.zero_()
 
         self.writer = None
@@ -72,6 +73,7 @@ class RLSModule(nn.Module):
             - torch.mm(I_c1, self.ug)
             + torch.mm(I_c2, self.wg)
         )
+        # TODO: Here is could be problems with weight initialization. Try *eye* init
         # hidden = gru_rls_cell(
         #   x, hidden.view(self.batch_size, -1), self.uzr, self.wzr, self.bz, self.uo, self.wo, self.bo
         # )

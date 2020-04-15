@@ -46,7 +46,7 @@ class CRLSModel(LightningModule):
             os.path.join(self.metaconf["ws_path"], "artifacts", "gradflow_plots")
         )
         fig = H.plot_grad_flow(self.named_parameters(), "RLS", 0, gradplot_savepath)
-        self.logger.experiment.add_figure('sdf', fig, self.global_step)
+        self.logger.experiment.add_figure("gradflow_plots", fig, self.global_step)
         if np.isnan(g_norm):
             log.warning("  gradient norm is NaN -> skip")
             optimizer.zero_grad()
@@ -62,27 +62,10 @@ class CRLSModel(LightningModule):
     def prepare_data(self):
         """Prepare and save dataset as TensorDataset to improve training speed.
         """
-
         self.generic_dataset = LIDCNodulesDataset(**self.dataset_params.params)
         log.info(f"DATASET SIZE: {len(self.generic_dataset)}")
 
-        tensor_dataset_path = os.path.join(
-            self.metaconf["ws_path"], "tensor_datasets", self.dataset_params.tensor_dataset_name
-        )
-
-        # compare configs, if not same, refresh dataset
-        current_config_snapshot_exists = H.config_snapshot(
-            "dataset_params", self.dataset_params.params, "src/data/aux/.dataset_config_snapshot.json",
-        )
-        if not current_config_snapshot_exists:
-            H.makedirs(tensor_dataset_path)
-            _tqdm_kwargs = {"desc": "Preparing TensorDataset", "total": len(self.generic_dataset)}
-            for i, sample in tqdm(enumerate(self.generic_dataset), **_tqdm_kwargs):
-                f_folder_path = os.path.join(tensor_dataset_path, "0")
-                H.makedirs(f_folder_path)
-                f_path = os.path.join(tensor_dataset_path, "0", f"nodule_{i}.pt")
-                save_nodules = {"nodule": sample["nodule"], "mask": sample["mask"]}
-                torch.save(save_nodules, f_path)
+        tensor_dataset_path = self.__prepare_tensor_dataset()
 
         self.dataset = DatasetFolder(tensor_dataset_path, torch.load, ("pt"))
         self.dataset.norm = self.generic_dataset.norm
@@ -150,3 +133,22 @@ class CRLSModel(LightningModule):
         # sample_imgs_in_hu = self.dataset.norm.denorm(self.forward(z))
         # grid = torchvision.utils.make_grid(sample_imgs_in_hu, 4, normalize=True)
         # self.logger.experiment.add_image(f"generated_images", grid, self.current_epoch)
+
+    def __prepare_tensor_dataset(self):
+        tensor_dataset_path = os.path.join(
+            self.metaconf["ws_path"], "tensor_datasets", self.dataset_params.tensor_dataset_name
+        )
+        # compare configs, if not same, refresh dataset
+        current_config_snapshot_exists = H.config_snapshot(
+            "dataset_params", self.dataset_params.params, "src/data/aux/.dataset_config_snapshot.json",
+        )
+        if not current_config_snapshot_exists:
+            H.makedirs(tensor_dataset_path)
+            _tqdm_kwargs = {"desc": "Preparing TensorDataset", "total": len(self.generic_dataset)}
+            for i, sample in tqdm(enumerate(self.generic_dataset), **_tqdm_kwargs):
+                f_folder_path = os.path.join(tensor_dataset_path, "0")
+                H.makedirs(f_folder_path)
+                f_path = os.path.join(tensor_dataset_path, "0", f"nodule_{i}.pt")
+                save_nodules = {"nodule": sample["nodule"], "mask": sample["mask"]}
+                torch.save(save_nodules, f_path)
+        return tensor_dataset_path
