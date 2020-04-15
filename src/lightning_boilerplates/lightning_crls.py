@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
+from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.datasets import DatasetFolder
 from pytorch_lightning.core import LightningModule
 
@@ -30,8 +31,8 @@ class CRLSModel(LightningModule):
         inp_image_size = [self.dataset_params.params["cube_voxelsize"]] * 2
         self.rls_model = RLSModule(inp_image_size)
 
-    def forward(self, input, hidden, step: int):
-        return self.rls_model(input, hidden, self.logger.experiment, step)
+    def forward(self, input, hidden, writer: SummaryWriter = None, step: int = None):
+        return self.rls_model(input, hidden, writer, step)
 
     def configure_optimizers(self):
         lr = self.hparams.lr
@@ -81,15 +82,11 @@ class CRLSModel(LightningModule):
         )
         return dl
 
-    # def val_dataloader(self):
-    #     dl = DataLoader(
-    #         self.dataset,
-    #         self.val_sampler,
-    #         batch_size=self.hparams.batch_size,
-    #         num_workers=4,
-    #         shuffle=True,
-    #     )
-    #     return dl
+    def val_dataloader(self):
+        dl = DataLoader(
+            self.dataset, sampler=self.val_sampler, batch_size=self.hparams.batch_size, num_workers=4,
+        )
+        return dl
 
     # def test_dataloader(self):
     #     dl = DataLoader(self.test_subset)
@@ -102,17 +99,17 @@ class CRLSModel(LightningModule):
         nodules, masks = batch[0]["nodule"], batch[0]["mask"]
         nodules, masks = nodules[:, :, nodules.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :]
 
-        hiddens = init_levelset(nodules.shape[-2:], shape="circle")
+        hiddens = init_levelset(nodules.shape[-2:], shape=self.hparams.levelset_init)
         hiddens = hiddens.repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
         for t in range(self.hparams.num_T):
             step = self.current_epoch * 1000 + batch_idx * 100 + t
-            outputs, hiddens = self.forward(nodules, hiddens, step=step)
+            outputs, hiddens = self.forward(nodules, hiddens, self.logger.experiment, step=step)
 
         loss = self.loss_f(outputs, masks)
 
         tqdm_dict = {"train_loss": loss}
         output = {
-            "imgs": nodules,
+            "batch": batch[0],
             "loss": loss,
             "progress_bar": tqdm_dict,
             "log": tqdm_dict,
@@ -121,11 +118,42 @@ class CRLSModel(LightningModule):
 
     def training_step_end(self, output):
         if self.global_step % 20 == 0:
-            imgs = output["imgs"]
+            imgs, masks = output["batch"]["nodule"], output["batch"]["mask"]
+            imgs, masks = imgs[:, :, imgs.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :]
             imgs_in_hu = self.dataset.norm.denorm(imgs)
             grid = torchvision.utils.make_grid(imgs_in_hu, 4, normalize=True)
-            self.logger.experiment.add_image(f"input_images", grid, self.global_step)
-        del output["imgs"]
+            mask_grid = torchvision.utils.make_grid(masks.unsqueeze(1), 4)
+            self.logger.experiment.add_image(f"input/images", grid, self.global_step)
+            self.logger.experiment.add_image(f"input/masks", mask_grid, self.global_step)
+        del output["batch"]
+        return output
+
+    def validation_step(self, batch, batch_idx):
+        nodules, masks = batch[0]["nodule"], batch[0]["mask"]
+        nodules, masks = nodules[:, :, nodules.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :]
+
+        hiddens = init_levelset(nodules.shape[-2:], shape=self.hparams.levelset_init)
+        hiddens = hiddens.repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
+        for t in range(self.hparams.num_T):
+            outputs, hiddens = self.forward(nodules, hiddens)
+
+        if self.global_step % 60 == 0:
+            imgs_in_hu = self.dataset.norm.denorm(nodules)
+            grid = torchvision.utils.make_grid(imgs_in_hu, 4, normalize=True)
+            mask_grid = torchvision.utils.make_grid(masks.unsqueeze(1), 4)
+            self.logger.experiment.add_image(f"valid/images", grid, self.global_step)
+            self.logger.experiment.add_image(f"valid/masks", mask_grid, self.global_step)
+
+        return {"val_loss": self.loss_f(outputs, masks)}
+
+    def validation_epoch_end(self, outputs):
+        val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
+        tqdm_dict = {"val_loss": val_loss_mean}
+        output = {
+            "val_loss": val_loss_mean,
+            "progress_bar": tqdm_dict,
+            "log": tqdm_dict,
+        }
         return output
 
     def on_epoch_end(self):
