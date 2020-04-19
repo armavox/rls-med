@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
+from torch.utils.tensorboard import SummaryWriter
 
 from data.helpers import extract_cube
 from data.transforms import Normalization
@@ -131,6 +132,7 @@ class LIDCNodulesDataset(Dataset):
         nodule_vol = self.norm(np.clip(nodule_vol, *self.clip_range))
 
         sample = {  # permuted to [C, D, H, W]
+            "lidc_nodule": nodule,
             "nodule": torch.from_numpy(nodule_vol).type(torch.float).unsqueeze(0).permute(0, 3, 1, 2),
             "mask": torch.from_numpy(nodule_mask).type(torch.long).permute(2, 0, 1)
         }
@@ -266,29 +268,59 @@ if __name__ == "__main__":
 
     config = {
         "datapath": "/data/ssd2/ctln-gan-data/LIDC-IDRI",
-        "cube_voxelsize": 48,
-        "extract_size_mm": 30.0,
+        "cube_voxelsize": 64,
+        "extract_size_mm": 64.0,
+        "nodule_diameter_interval": [8.0, 30.0],
+        "masked": False,
+        "ct_clip_range": (-1000, 600),
+        "mapping_range": [-1.0, 1.0]
     }
     dataset = LIDCNodulesDataset(**config)
-    print(dataset[0])
 
-    from torch.utils.data import DataLoader
+    # from torch.utils.data import DataLoader
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    ws_path = "/home/artem.lobantsev/ssd/rls-med-ws/tensorboard_logs2"
+    writer = SummaryWriter(os.path.join(ws_path, "lidc-log0"))
 
-    dl = DataLoader(dataset, batch_size=4)
+    norm = Normalization(from_min=-1.0, from_max=1.0, to_min=0, to_max=255)
+    norm2 = Normalization(from_min=-1000, from_max=600, to_min=0, to_max=1)
+    for i, sample in tqdm(enumerate(dataset)):
+        patient_id = sample["lidc_nodule"].pylidc_scan.patient_id
+        scan = sample["lidc_nodule"].pylidc_scan.to_volume()
+        clip_scan = np.clip(scan, *config["ct_clip_range"])
+        img = dataset.norm.denorm(sample["nodule"][:, :, :, config["cube_voxelsize"] // 2])
+        img_01 = norm2(img)
+        # img = norm(sample["nodule"][:, :, :, config["cube_voxelsize"] // 2]).to(torch.uint8)
+        # scan = norm2(scan).astype(np.uint8)
 
-    for batch in dl:
-        nodules = batch["nodule"]  # B, C, X, Y, Z
-        masked_nodules = batch["masked_nodule"]  # B, C, X, Y, Z
+        fig, ax = plt.subplots(2, 2, figsize=(8, 8))
+        im0 = ax[0, 0].imshow(img.numpy()[0], cmap="gray")
+        ax[0, 0].axis('off')
+        divider = make_axes_locatable(ax[0, 0])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im0, cax=cax, orientation='vertical')
+
+        im1 = ax[0, 1].imshow(clip_scan[:, :, clip_scan.shape[2] // 2], cmap="gray")
+        ax[0, 1].axis('off')
+        divider = make_axes_locatable(ax[0, 1])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im1, cax=cax, orientation='vertical')
+
+        im2 = ax[1, 0].imshow(img_01.numpy()[0], cmap="gray")
+        ax[1, 0].axis('off')
+        divider = make_axes_locatable(ax[1, 0])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im2, cax=cax, orientation='vertical')
+
+        im3 = ax[1, 1].imshow(scan[:, :, scan.shape[2] // 2], cmap="gray")
+        ax[1, 1].axis('off')
+        divider = make_axes_locatable(ax[1, 1])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im3, cax=cax, orientation='vertical')
+
+        fig.suptitle(patient_id)
+        fig.tight_layout()
+        writer.add_figure("sample_fig", fig, i)
 
     print("Done")
-
-    # savepath = "/home/armavox/data/lungs/LNDb/resampled_nodules_51mm_around_center"
-    # if not os.path.exists(savepath):
-    #     os.makedirs(savepath)
-    # for i, entry in enumerate(dataset, 1):
-    #     nodule_array = entry["nodule"].numpy()
-    #  fname = f"lndb_{entry['annotation']['lndb_id']:04d}_{entry['annotation']['finding_id']:02d}.npy"
-    #     filepath = os.path.join(savepath, fname)
-    #     np.save(filepath, nodule_array)
-    #     print(f"{fname}: {i}/{len(dataset)}")
-    # print(f"done")

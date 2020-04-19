@@ -131,7 +131,15 @@ class CRLSModel(LightningModule):
             imgs, masks = output["batch"]["nodule"], output["batch"]["mask"]
             imgs, masks = imgs[:, :, imgs.size(2) // 2, :, :], masks[:, masks.size(2) // 2, :, :]
             imgs_in_hu = self.dataset.norm.denorm(imgs)
-            grid = torchvision.utils.make_grid(imgs_in_hu, 4, normalize=True)
+            grid = torchvision.utils.make_grid(
+                imgs_in_hu,
+                nrow=4,
+                normalize=True,
+                range=(
+                    self.dataset_params.params["ct_clip_range"][0],
+                    self.dataset_params.params["ct_clip_range"][1],
+                ),
+            )
             mask_grid = torchvision.utils.make_grid(masks.unsqueeze(1), 4)
             self.logger.experiment.add_image(f"input/images", grid, self.global_step)
             self.logger.experiment.add_image(f"input/masks", mask_grid, self.global_step)
@@ -149,7 +157,15 @@ class CRLSModel(LightningModule):
 
         if self.global_step % 60 == 0:
             imgs_in_hu = self.dataset.norm.denorm(nodules)
-            grid = torchvision.utils.make_grid(imgs_in_hu, 4, normalize=True)
+            grid = torchvision.utils.make_grid(
+                imgs_in_hu,
+                nrow=4,
+                normalize=True,
+                range=(
+                    self.dataset_params.params["ct_clip_range"][0],
+                    self.dataset_params.params["ct_clip_range"][1],
+                ),
+            )
             mask_grid = torchvision.utils.make_grid(masks.unsqueeze(1), 4)
             self.logger.experiment.add_image(f"valid/images", grid, self.global_step)
             self.logger.experiment.add_image(f"valid/masks", mask_grid, self.global_step)
