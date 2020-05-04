@@ -130,11 +130,12 @@ class LIDCNodulesDataset(Dataset):
         nodule = self.nodule_list[i]
         nodule_vol, nodule_mask = self.load_nodule_vol(nodule)
         nodule_vol = self.norm(np.clip(nodule_vol, *self.clip_range))
+        mask = nodule_mask >= 0.999999999999999
 
         sample = {  # permuted to [C, D, H, W]
             "lidc_nodule": nodule,
             "nodule": torch.from_numpy(nodule_vol).type(torch.float).unsqueeze(0).permute(0, 3, 1, 2),
-            "mask": torch.from_numpy(nodule_mask).type(torch.long).permute(2, 0, 1)
+            "mask": torch.from_numpy(mask).type(torch.long).permute(2, 0, 1)
         }
         return sample
 
@@ -145,7 +146,7 @@ class LIDCNodulesDataset(Dataset):
         mask_vol = np.zeros(volume.shape)
         mask_vol[bb[0].start : bb[0].stop, bb[1].start : bb[1].stop, bb[2].start : bb[2].stop][
             nodule.mask
-        ] = 1
+        ] = 1.0
 
         nodule_vol = extract_cube(
             series_volume=volume,
@@ -281,20 +282,18 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     ws_path = "/home/artem.lobantsev/ssd/rls-med-ws/tensorboard_logs2"
-    writer = SummaryWriter(os.path.join(ws_path, "lidc-log0"))
+    writer = SummaryWriter(os.path.join(ws_path, "lidc-log1"))
 
-    norm = Normalization(from_min=-1.0, from_max=1.0, to_min=0, to_max=255)
-    norm2 = Normalization(from_min=-1000, from_max=600, to_min=0, to_max=1)
+    norm = Normalization(from_min=-1000, from_max=600, to_min=0, to_max=1)
     for i, sample in tqdm(enumerate(dataset)):
         patient_id = sample["lidc_nodule"].pylidc_scan.patient_id
-        scan = sample["lidc_nodule"].pylidc_scan.to_volume()
+        scan = sample["lidc_nodule"].pylidc_scan.to_volume(False)
         clip_scan = np.clip(scan, *config["ct_clip_range"])
-        img = dataset.norm.denorm(sample["nodule"][:, :, :, config["cube_voxelsize"] // 2])
-        img_01 = norm2(img)
-        # img = norm(sample["nodule"][:, :, :, config["cube_voxelsize"] // 2]).to(torch.uint8)
-        # scan = norm2(scan).astype(np.uint8)
+        img = dataset.norm.denorm(sample["nodule"][:, config["cube_voxelsize"] // 2, :, :])
+        mask = sample["mask"][config["cube_voxelsize"] // 2, :, :]
+        img_01 = norm(img)
 
-        fig, ax = plt.subplots(2, 2, figsize=(8, 8))
+        fig, ax = plt.subplots(2, 3, figsize=(8, 8))
         im0 = ax[0, 0].imshow(img.numpy()[0], cmap="gray")
         ax[0, 0].axis('off')
         divider = make_axes_locatable(ax[0, 0])
@@ -306,6 +305,12 @@ if __name__ == "__main__":
         divider = make_axes_locatable(ax[0, 1])
         cax = divider.append_axes('right', size='5%', pad=0.05)
         fig.colorbar(im1, cax=cax, orientation='vertical')
+
+        im15 = ax[0, 2].imshow(mask)
+        ax[0, 2].axis('off')
+        divider = make_axes_locatable(ax[0, 2])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im15, cax=cax, orientation='vertical')
 
         im2 = ax[1, 0].imshow(img_01.numpy()[0], cmap="gray")
         ax[1, 0].axis('off')
