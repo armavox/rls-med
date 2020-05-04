@@ -6,7 +6,6 @@ import numpy as np
 import raster_geometry
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.utils import make_grid
 
@@ -59,14 +58,7 @@ class RLSModule(nn.Module):
         nn.init.eye_(self.uo)
         nn.init.eye_(self.wo)
 
-        # self.gru = nn.GRUCell(*in_feat)
         self.dense = nn.Linear(*in_feat)
-
-        # nn.init.eye_(self.gru.weight_hh)
-        # nn.init.eye_(self.gru.weight_ih)
-        # self.gru.bias_ih.data.zero_()
-        # self.gru.bias_hh.data.zero_()
-
         nn.init.xavier_normal_(self.dense.weight)
         self.dense.bias.data.zero_()
 
@@ -92,8 +84,7 @@ class RLSModule(nn.Module):
         plot(input, 'input')
         plot(hidden, "levelset")
         plot(kappa, "kappa")
-        # hidden = self.gru(x, hidden.view(batch_size, -1))
-        # hidden = F.relu(hidden)
+
         output = self.dense(hidden)
         return (
             output.view(batch_size, *self.img_size),
@@ -123,9 +114,9 @@ class RLSModule(nn.Module):
 
         x = kappa + self.ug @ I_c1 - self.wg @ I_c2
         plot(x, "x")
-        z_t = F.sigmoid(self.uz @ x + self.wz @ hidden + self.bz)
-        r_t = F.sigmoid(self.ur @ x + self.wr @ hidden + self.br)
-        o_t = F.tanh(self.uo @ x + self.wo @ (hidden * r_t) + self.bo)
+        z_t = torch.sigmoid(self.uz @ x + self.wz @ hidden + self.bz)
+        r_t = torch.sigmoid(self.ur @ x + self.wr @ hidden + self.br)
+        o_t = torch.tanh(self.uo @ x + self.wo @ (hidden * r_t) + self.bo)
 
         return z_t * hidden + (1 - z_t) * o_t
 
