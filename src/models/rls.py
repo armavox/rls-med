@@ -58,6 +58,9 @@ class RLSModule(nn.Module):
         nn.init.eye_(self.uo)
         nn.init.eye_(self.wo)
 
+        self.k1 = nn.Parameter(torch.tensor([2.0]))
+        self.k2 = nn.Parameter(torch.tensor([2.0]))
+
         self.dense = nn.Linear(*in_feat)
         nn.init.xavier_normal_(self.dense.weight)
         self.dense.bias.data.zero_()
@@ -70,8 +73,8 @@ class RLSModule(nn.Module):
         batch_size = input.size(0)
 
         c1, c2 = self.avg_inside(input, hidden.detach()), self.avg_outside(input, hidden.detach())
-        I_c1 = (input - c1) ** 2
-        I_c2 = (input - c2) ** 2
+        I_c1 = (self.k1 * input - c1) ** 2
+        I_c2 = (self.k2 * input - c2) ** 2
         kappa = self.curvature(hidden)
         make_grid_p = partial(make_grid, nrow=4, normalize=True)
         if writer is not None:
@@ -145,5 +148,6 @@ def init_levelset(img_size: tuple, shape: str = "checkerboard"):
 
 
 def plot(matrix, name):
-    plt.imshow(matrix[0][0], cmap="gray")
+    plt.imshow(matrix[0][0].detach().cpu().numpy(), cmap="gray")
     plt.savefig(f"{name}.png")
+    plt.close()

@@ -168,8 +168,10 @@ class CRLSModel(LightningModule):
                 ),
             )
             mask_grid = torchvision.utils.make_grid(masks.unsqueeze(1), 4)
+            hiddens_grid = torchvision.utils.make_grid(hiddens, 4)
             self.logger.experiment.add_image(f"valid/images", grid, self.global_step)
             self.logger.experiment.add_image(f"valid/masks", mask_grid, self.global_step)
+            self.logger.experiment.add_image(f"valid/levelset", hiddens_grid, self.global_step)
 
         return {"val_loss": self.loss_f(outputs, masks)}
 
@@ -207,3 +209,20 @@ class CRLSModel(LightningModule):
                 save_nodules = {"nodule": sample["nodule"], "mask": sample["mask"]}
                 torch.save(save_nodules, f_path)
         return tensor_dataset_path
+
+
+def CrossEntropy2d(input, target, weight=None, size_average=False):
+    # input:(n, c, h, w) target:(n, h, w)
+    n, c, h, w = input.size()
+
+    input = input.transpose(1, 2).transpose(2, 3).contiguous()
+    input = input[target.view(n, h, w, 1).repeat(1, 1, 1, c) >= 0].view(-1, c)
+
+    target_mask = target >= 0
+    target = target[target_mask]
+    # loss = F.nll_loss(F.log_softmax(input), target, weight=weight, size_average=False)
+    loss = F.cross_entropy(input, target, weight=weight, size_average=False)
+    if size_average:
+        loss /= target_mask.sum().data[0]
+
+    return loss
