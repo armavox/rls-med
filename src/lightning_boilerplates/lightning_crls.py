@@ -16,7 +16,7 @@ from pytorch_lightning.core import LightningModule
 import utils.helpers as H
 from data.lidc import LIDCNodulesDataset
 # from data.transforms import Normalization
-from models.rls import RLSModule, init_levelset
+from models.rls import RLSModule, init_levelset, plot
 
 
 log = logging.getLogger("lightning_boilerplates.crls")
@@ -113,6 +113,7 @@ class CRLSModel(LightningModule):
 
         hiddens = init_levelset(nodules.shape[-2:], shape=self.hparams.levelset_init)
         hiddens = hiddens.repeat(nodules.size(0), 1, 1, 1).type_as(nodules)
+        plot(hiddens, "init")
         for t in range(self.hparams.num_T):
             step = self.current_epoch * 1000 + batch_idx * 100 + t
             outputs, hiddens = self.forward(nodules, hiddens, self.logger.experiment, step=step)

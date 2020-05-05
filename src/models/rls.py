@@ -6,10 +6,9 @@ import numpy as np
 import raster_geometry
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.utils import make_grid
-
-from data.transforms import img_derivative, heaviside, SOBEL_X, SOBEL_Y
 
 
 class RLSModule(nn.Module):
@@ -37,26 +36,18 @@ class RLSModule(nn.Module):
 
         self.ug = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.wg = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
-        nn.init.eye_(self.ug)
-        nn.init.eye_(self.wg)
 
         self.uz = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.wz = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.bz = nn.Parameter(torch.zeros(in_feat[0]))
-        nn.init.eye_(self.uz)
-        nn.init.eye_(self.wz)
 
         self.ur = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.wr = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.br = nn.Parameter(torch.zeros(in_feat[0]))
-        nn.init.eye_(self.ur)
-        nn.init.eye_(self.wr)
 
         self.uo = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.wo = nn.Parameter(torch.zeros(*in_feat).normal_(std=0.01))
         self.bo = nn.Parameter(torch.zeros(in_feat[0]))
-        nn.init.eye_(self.uo)
-        nn.init.eye_(self.wo)
 
         self.k1 = nn.Parameter(torch.tensor([2.0]))
         self.k2 = nn.Parameter(torch.tensor([2.0]))
@@ -72,9 +63,10 @@ class RLSModule(nn.Module):
 
         batch_size = input.size(0)
 
-        c1, c2 = self.avg_inside(input, hidden.detach()), self.avg_outside(input, hidden.detach())
-        I_c1 = (self.k1 * input - c1) ** 2
-        I_c2 = (self.k2 * input - c2) ** 2
+        c1, c2 = self.avg_inside_outside(input, hidden)
+
+        I_c1 = (input - c1) ** 2
+        I_c2 = (input - c2) ** 2
         kappa = self.curvature(hidden)
         make_grid_p = partial(make_grid, nrow=4, normalize=True)
         if writer is not None:
@@ -97,31 +89,46 @@ class RLSModule(nn.Module):
     def curvature(self, hidden):
         """hidden.size: [B, C, H, W], C == 1"""
 
-        phi_dx = img_derivative(hidden, SOBEL_X)
-        phi_dy = img_derivative(hidden, SOBEL_Y)
-        phi_dx_n = phi_dx / (phi_dx ** 2 + phi_dy ** 2 + 1e-8) ** 0.5
-        phi_dy_n = phi_dy / (phi_dx ** 2 + phi_dy ** 2 + 1e-8) ** 0.5
-        return -(torch.abs(phi_dx_n) + torch.abs(phi_dy_n))
+        hf = F.pad(hidden, pad=[1, 1, 1, 1], mode='replicate')
 
-    def avg_inside(self, input, level_set):
-        mask = heaviside(level_set) > 0.5
-        inside = input * mask
-        return inside.mean()
+        dy = (hf[:, :, 2:, 1:-1] - hf[:, :, :-2, 1:-1]) * 0.5
+        dx = (hf[:, :, 1:-1, 2:] - hf[:, :, 1:-1, :-2]) * 0.5
+        dyy = hf[:, :, 2:, 1:-1] + hf[:, :, :-2, 1:-1] - 2 * hidden
+        dxx = hf[:, :, 1:-1, 2:] + hf[:, :, 1:-1, :-2] - 2 * hidden
+        dxy = 0.25 * (hf[:, :, 2:, 2:] + hf[:, :, :-2, :-2] - hf[:, :, :-2, 2:] - hf[:, :, 2:, :-2])
 
-    def avg_outside(self, input, level_set):
-        mask = heaviside(level_set) > 0.5
-        outside = input * ~mask
-        return outside.mean()
+        d2x = dx ** 2
+        d2y = dy ** 2
+
+        grad2 = d2x + d2y
+
+        t = (dxx * d2y - 2 * dxy * dx * dy + dyy * d2x) / (grad2 * torch.sqrt(grad2) + 1e-8)
+
+        return t
+
+    def avg_inside_outside(self, x, hidden):
+        H = hidden
+        Hinv = 1. - H
+        Hsum = torch.sum(H, dim=[2, 3], keepdim=True)
+        Hinvsum = torch.sum(Hinv, dim=[2, 3], keepdim=True)
+        Hsum[Hsum == 0] += 1
+        Hinvsum[Hinvsum == 0] += 1
+        avg_inside = torch.sum(x * H, dim=[2, 3], keepdim=True)
+        avg_oustide = torch.sum(x * Hinv, dim=[2, 3], keepdim=True)
+
+        avg_inside /= Hsum
+        avg_oustide /= Hinvsum
+
+        return avg_inside, avg_oustide
 
     def gru_rls_cell(self, hidden, kappa, I_c1, I_c2):
-
-        x = kappa + self.ug @ I_c1 - self.wg @ I_c2
+        x = kappa - self.ug @ I_c1 + self.wg @ I_c2
         plot(x, "x")
         z_t = torch.sigmoid(self.uz @ x + self.wz @ hidden + self.bz)
         r_t = torch.sigmoid(self.ur @ x + self.wr @ hidden + self.br)
         o_t = torch.tanh(self.uo @ x + self.wo @ (hidden * r_t) + self.bo)
 
-        return z_t * hidden + (1 - z_t) * o_t
+        return z_t * o_t + (1 - z_t) * hidden
 
 
 def init_levelset(img_size: tuple, shape: str = "checkerboard"):
