@@ -11,13 +11,4 @@ in the `name:` field of yaml. By default it is `rls-med`
 5. Install the git pre-hook with `pre-commit install` from the root directory.
 6. Enjoy the science!
 
-> **IMPORTANT NOTE**
-> 
-> There bug in pylidc with DICOM pixel_aray preprocessing. Until pylidc:master will be updated use my branch:
-> ```bash
-> pip install pylidc
-> git clone https://github.com/armavox/pylidc.git && cd pylidc
-> git checkout fix_slope_intercept && cd ..
-> pip install -U ./pylidc
-
 For documenting the code you can use the great extension for VSCode: autoDocstring
